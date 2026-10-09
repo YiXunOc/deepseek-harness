@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import { access } from 'node:fs/promises'
+import { dirname } from 'node:path'
 import { promisify } from 'node:util'
 import { assemblePortable } from './assemble.ts'
 import { createPortableArchive, type PortableArchiveResult } from './archive.ts'
@@ -14,6 +15,7 @@ export interface PortableBuildOptions extends WindowsPortableBuildInput {
   readonly artifactsDir?: string
   readonly version?: string
   readonly commit?: string
+  readonly launcherPath?: string
   readonly execute?: (plan: WindowsPortableBuildPlan) => Promise<void>
 }
 
@@ -25,12 +27,15 @@ export interface PortableBuildResult {
 /** Build the existing Desktop directory target, assemble it, and archive it. */
 export async function buildPortable(options: PortableBuildOptions): Promise<PortableBuildResult> {
   const plan = planWindowsPortableBuild(options)
+  if (options.launcherPath === undefined) throw new Error('portable build: --launcher is required')
+  await access(options.launcherPath)
   const execute = options.execute ?? runDesktopBuild
   await execute(plan)
   await access(plan.desktopOutputDir)
   const assembly = await assemblePortable({
     sourceDir: plan.desktopOutputDir,
     outputDir: plan.portableOutputDir,
+    launcherPath: options.launcherPath,
     metadata: {
       ...(options.version === undefined ? {} : { version: options.version }),
       ...(options.commit === undefined ? {} : { commit: options.commit }),
@@ -39,7 +44,7 @@ export async function buildPortable(options: PortableBuildOptions): Promise<Port
   })
   const archive = await createPortableArchive({
     packageRoot: assembly.root,
-    outputDir: options.artifactsDir ?? plan.portableOutputDir,
+    outputDir: options.artifactsDir ?? dirname(plan.portableOutputDir),
     metadata: {
       ...(options.version === undefined ? {} : { version: options.version }),
       ...(options.commit === undefined ? {} : { commit: options.commit }),

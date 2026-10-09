@@ -15,6 +15,7 @@ async function main(): Promise<void> {
     options: {
       repository: { type: 'string' },
       source: { type: 'string' },
+      launcher: { type: 'string' },
       output: { type: 'string' },
       artifacts: { type: 'string' },
       version: { type: 'string' },
@@ -30,6 +31,7 @@ async function main(): Promise<void> {
       hostPlatform: process.platform,
       hostArch: process.arch,
       repositoryRoot: required(values, 'repository'),
+      ...(typeof values.launcher === 'string' ? { launcherPath: values.launcher } : {}),
       ...(typeof values.artifacts === 'string' ? { artifactsDir: values.artifacts } : {}),
       ...(typeof values.version === 'string' ? { version: values.version } : {}),
       ...(typeof values.commit === 'string' ? { commit: values.commit } : {}),
@@ -44,6 +46,7 @@ async function main(): Promise<void> {
     const result = await assemblePortable({
       sourceDir: required(values, 'source'),
       outputDir: packageRoot,
+      ...(typeof values.launcher === 'string' ? { launcherPath: values.launcher } : {}),
       metadata: {
         ...(typeof values.version === 'string' ? { version: values.version } : {}),
         ...(typeof values.commit === 'string' ? { commit: values.commit } : {}),

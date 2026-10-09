@@ -13,7 +13,9 @@ async function fixture(): Promise<{ root: string; packageRoot: string; output: s
   const output = join(root, 'artifacts')
   await mkdir(join(packageRoot, 'AppData'), { recursive: true })
   await mkdir(output, { recursive: true })
-  await writeFile(join(packageRoot, 'DSH Desktop.exe'), 'portable-exe')
+  await mkdir(join(packageRoot, 'App'), { recursive: true })
+  await writeFile(join(packageRoot, 'DSH Desktop Portable.exe'), 'portable-exe')
+  await writeFile(join(packageRoot, 'App', 'DeepSeek Harness.exe'), 'electron-exe')
   await writeFile(join(packageRoot, '.dsh-portable'), '{"schemaVersion":1}\n')
   return { root, packageRoot, output }
 }
@@ -27,5 +29,10 @@ describe('portable archive', () => {
     await expect(readFile(result.sha256Path, 'utf8')).resolves.toMatch(/^[a-f0-9]{64}  DSH-Desktop-test-x64-Portable\.zip\n$/u)
     await expect(readFile(result.buildInfoPath, 'utf8')).resolves.toContain('version=test')
     await expect(readFile(result.buildInfoPath, 'utf8')).resolves.toContain('commit=abc')
+  })
+  it('rejects an Electron executable at package root that bypasses the launcher', async () => {
+    const { packageRoot, output } = await fixture()
+    await writeFile(join(packageRoot, 'DeepSeek Harness.exe'), 'bypass')
+    await expect(createPortableArchive({ packageRoot, outputDir: output })).rejects.toThrow('bypasses launcher')
   })
 })

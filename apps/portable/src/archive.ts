@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { access, lstat, mkdir, writeFile } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 
 const run = promisify(execFile)
@@ -21,6 +21,12 @@ async function requirePortableRoot(root: string): Promise<void> {
   const stat = await lstat(root)
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('portable archive: package root must be a real directory')
   await access(join(root, '.dsh-portable'))
+  const launcher = await lstat(join(root, 'DSH Desktop Portable.exe'))
+  if (!launcher.isFile() || launcher.isSymbolicLink()) throw new Error('portable archive: root launcher is required')
+  const app = await lstat(join(root, 'App', 'DeepSeek Harness.exe'))
+  if (!app.isFile() || app.isSymbolicLink()) throw new Error('portable archive: internal Electron executable is required')
+  try { await access(join(root, 'DeepSeek Harness.exe')); throw new Error('portable archive: root Electron executable bypasses launcher') }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
   const appData = await lstat(join(root, 'AppData'))
   if (!appData.isDirectory() || appData.isSymbolicLink()) throw new Error('portable archive: AppData directory is required')
 }
@@ -33,6 +39,10 @@ function buildInfo(metadata: Readonly<Record<string, string>> | undefined): stri
 export async function createPortableArchive(options: PortableArchiveOptions): Promise<PortableArchiveResult> {
   const packageRoot = resolve(options.packageRoot)
   const outputDir = resolve(options.outputDir)
+  const location = relative(packageRoot, outputDir)
+  if (location === '' || (location !== '..' && !location.startsWith(`..${sep}`))) {
+    throw new Error('portable archive: output directory must be outside package root')
+  }
   await requirePortableRoot(packageRoot)
   await mkdir(outputDir, { recursive: true })
   const archiveName = `${basename(packageRoot)}.zip`

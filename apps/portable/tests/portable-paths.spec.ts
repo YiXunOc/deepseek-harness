@@ -27,12 +27,12 @@ describe('portable layout', () => {
 describe('portable child environment', () => {
   it('injects the portable roots without discarding unrelated variables', () => {
     const paths = portablePaths(root)
-    const environment = portableEnvironment(paths, { PATH: 'C:\\Windows\\System32', DSH_HOME: 'old' })
+    const environment = portableEnvironment(paths, { PATH: 'C:\\Windows\\System32', DSH_HOME: 'old', USERPROFILE: 'C:\\Users\\real' })
 
     expect(environment.PATH).toBe('C:\\Windows\\System32')
     expect(environment.APPDATA).toBe(paths.appData)
     expect(environment.LOCALAPPDATA).toBe(paths.appData)
-    expect(environment.USERPROFILE).toBe(paths.appData)
+    expect(environment.USERPROFILE).toBe('C:\\Users\\real')
     expect(environment.DSH_PORTABLE_ROOT).toBe(root)
     expect(environment.DSH_PORTABLE_APP_DATA).toBe(paths.appData)
     expect(environment.DSH_HOME).toBe(paths.dshHome)

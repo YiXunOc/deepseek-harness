@@ -21,7 +21,7 @@ export function planPortableLaunch(options: PortableLaunchOptions): PortableLaun
   const root = win32.resolve(options.packageRoot)
   const paths = portablePaths(root)
   return {
-    executable: options.executable ?? win32.join(root, 'resources', 'app.asar', 'DSH Desktop.exe'),
+    executable: options.executable ?? win32.join(root, 'DSH Desktop Portable.exe'),
     cwd: root,
     environment: portableEnvironment(
       paths,

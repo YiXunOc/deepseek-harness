@@ -1,7 +1,6 @@
 import { cp, lstat, mkdir, readdir, writeFile } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import { portablePaths, type PortablePaths } from './layout.ts'
-import { portableLauncherScript } from './launcher.ts'
 
 export interface PortableBuildMetadata {
   readonly [key: string]: unknown
@@ -10,6 +9,7 @@ export interface PortableBuildMetadata {
 export interface PortableAssemblyOptions {
   readonly sourceDir: string
   readonly outputDir: string
+  readonly launcherPath?: string
   readonly metadata?: PortableBuildMetadata
 }
 
@@ -48,6 +48,10 @@ function json(value: unknown): string {
 export async function assemblePortable(options: PortableAssemblyOptions): Promise<PortableAssemblyResult> {
   const source = resolve(options.sourceDir)
   const output = resolve(options.outputDir)
+  const launcher = resolve(options.launcherPath ?? join(source, 'portable-launcher.exe'))
+  const launcherStat = await lstat(launcher)
+  if (!launcherStat.isFile() || launcherStat.isSymbolicLink()) throw new Error('portable assembly: launcher must be a real file')
+  if (launcher === join(source, 'DeepSeek Harness.exe')) throw new Error('portable assembly: launcher must not be the Electron executable')
   if (source === output || output.startsWith(`${source}${sep}`)) {
     throw new Error('portable assembly: output must not be inside source')
   }
@@ -55,25 +59,26 @@ export async function assemblePortable(options: PortableAssemblyOptions): Promis
   if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) throw new Error('portable assembly: source must be a real directory')
   await assertNoSymlinks(source)
   await ensureEmptyOutput(output)
+  await mkdir(join(output, 'App'), { recursive: true })
   for (const entry of await readdir(source)) {
-    await cp(join(source, entry), join(output, entry), { recursive: true, errorOnExist: true, force: false })
+    if (join(source, entry) === launcher) continue
+    await cp(join(source, entry), join(output, 'App', entry), { recursive: true, errorOnExist: true, force: false })
   }
+  await cp(launcher, join(output, 'DSH Desktop Portable.exe'), { errorOnExist: true, force: false })
 
   const paths: PortablePaths = portablePaths(output)
   await mkdir(paths.appData, { recursive: true })
   for (const directory of [paths.dshHome, paths.sessionData, paths.crashDumps, paths.logs, paths.temp,
     paths.pnpmHome, paths.pnpmStore, paths.npmCache]) await mkdir(directory, { recursive: true })
-  const executable = join(output, 'DeepSeek Harness.exe')
+  const executable = join(output, 'App', 'DeepSeek Harness.exe')
   const executableStat = await lstat(executable).catch(() => undefined)
   if (executableStat === undefined || !executableStat.isFile() || executableStat.isSymbolicLink()) {
-    throw new Error('portable assembly: DeepSeek Harness.exe is required at package root')
+    throw new Error('portable assembly: DeepSeek Harness.exe is required in App')
   }
-  const launcher = join(output, 'DSH Desktop Portable.cmd')
-  await writeFile(launcher, portableLauncherScript({ executable: 'DeepSeek Harness.exe' }), { flag: 'wx' })
   const marker = join(output, '.dsh-portable')
   const metadata = join(output, 'portable-build.json')
   await writeFile(marker, json({ schemaVersion: 1, layout: 'AppData', runtime: 'portable' }), { flag: 'wx' })
-  await writeFile(join(paths.appData, 'layout.json'), json({ schemaVersion: 1, root: paths.root, appData: paths.appData }), { flag: 'wx' })
-  await writeFile(metadata, json({ schemaVersion: 1, sourceDir: source, ...options.metadata }), { flag: 'wx' })
+  await writeFile(join(paths.appData, 'layout.json'), json({ schemaVersion: 1, root: '.', appData: 'AppData' }), { flag: 'wx' })
+  await writeFile(metadata, json({ schemaVersion: 1, ...options.metadata }), { flag: 'wx' })
   return { root: output, appData: paths.appData, marker, metadata }
 }

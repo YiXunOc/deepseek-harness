@@ -6,7 +6,7 @@ describe('Portable launcher plan', () => {
     const plan = planPortableLaunch({ packageRoot: 'C:\\Apps\\DSH-Portable', baseEnvironment: { PATH: 'C:\\Windows' } })
 
     expect(plan.cwd).toBe('C:\\Apps\\DSH-Portable')
-    expect(plan.executable).toBe('C:\\Apps\\DSH-Portable\\resources\\app.asar\\DSH Desktop.exe')
+    expect(plan.executable).toBe('C:\\Apps\\DSH-Portable\\DSH Desktop Portable.exe')
     expect(plan.environment.DSH_HOME).toBe('C:\\Apps\\DSH-Portable\\AppData\\dsh-home')
     expect(plan.environment.APPDATA).toBe('C:\\Apps\\DSH-Portable\\AppData')
     expect(plan.environment.PATH).toBe('C:\\Windows')

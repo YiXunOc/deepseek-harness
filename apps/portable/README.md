@@ -8,9 +8,9 @@ The extracted package root owns all mutable state:
 
 ```text
 <package-root>/
-  DSH Desktop.exe
+  DSH Desktop Portable.exe  # sole root launcher
   .dsh-portable
-  resources/
+  App/                       # complete Electron payload, including DeepSeek Harness.exe and resources/
   AppData/
     dsh-home/       # DSH_HOME: profiles, sessions, plugins, settings, and DSH state
     session/        # Chromium session/cache data when separately configurable
@@ -26,9 +26,11 @@ The extracted package root owns all mutable state:
 
 ## Minimal-source-change strategy
 
-First evaluate an external Windows launcher that sets `APPDATA`, `LOCALAPPDATA`, `TEMP`, `TMP`, `TMPDIR`, `DSH_HOME`, and package-manager cache variables before starting the existing Electron executable. Keep the Electron payload under a separate internal executable name and expose the launcher as `DSH Desktop.exe` only if Electron packaging, protocol registration, single-instance behavior, crash reporting, and updater interactions remain correct. Do not claim complete process-level isolation until native Windows probes show that Electron, Host, package-manager children, bundled runtimes, and plugins do not write persistent state outside `AppData`.
+Build the GUI-subsystem launcher from `src/portable-launcher.c` as a Windows x64 executable, then pass its path via `--launcher` to `assemble` or `build`. The launcher sets `APPDATA`, `LOCALAPPDATA`, `TEMP`, `TMP`, `TMPDIR`, `DSH_HOME`, and package-manager cache variables before starting `App/DeepSeek Harness.exe`. Preserve the real `USERPROFILE`. The main-process hook binds Electron data paths before ready; ordinary Desktop packaging is unchanged. The `build` command requires a Windows x64 host; the prior isolated Linux/Wine experiment is not a supported build entry.
 
-If environment-based redirection cannot set Electron's exact `userData`, `sessionData`, or crash paths before Electron initializes, propose the smallest Desktop entry-point hook as a separately reviewable change. Do not silently widen the patch into Harness packages.
+The archive must have only `DSH Desktop Portable.exe` at its root, with the full Electron payload under `App/`. Do not claim complete process-level isolation until native Windows probes show that Electron, Host, package-manager children, bundled runtimes, and plugins do not write persistent state outside `AppData`.
+
+For example, compile the launcher with a Windows x64 MinGW toolchain, then invoke `pnpm --filter @deepseek-ai/dsh-portable build -- --repository <repo> --launcher <compiled-launcher.exe>` on a Windows x64 build host. A Linux-built launcher can be checked under Wine for arguments and environment, but Wine is not a native Windows Desktop startup test.
 
 ## Build and validation requirements
 

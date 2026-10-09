@@ -18,7 +18,6 @@ export function portableEnvironment(
     ...(path === undefined ? {} : { PATH: path }),
     APPDATA: paths.appData,
     LOCALAPPDATA: paths.appData,
-    USERPROFILE: paths.appData,
     DSH_PORTABLE_ROOT: paths.root,
     DSH_PORTABLE_APP_DATA: paths.appData,
     DSH_HOME: paths.dshHome,
