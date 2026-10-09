@@ -1,0 +1,11 @@
+{
+  "name": "@deepseek-ai/dsh-portable",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run tests",
+    "assemble": "tsx src/cli.ts assemble",
+    "archive": "tsx src/cli.ts archive",
+    "build": "tsx src/cli.ts build"
+  }
+}
