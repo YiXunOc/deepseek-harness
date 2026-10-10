@@ -9,7 +9,7 @@ const requireDesktop = createRequire(new URL('../../desktop/package.json', impor
 const paths = desktopTargetBuildPaths('win-x64')
 const electron = join(paths.electron, 'electron.exe')
 if (existsSync(paths.electron)) throw new Error('portable cross Electron: fresh target required')
-const version = JSON.parse(readFileSync(new URL('../../desktop/node_modules/electron/package.json', import.meta.url), 'utf8')).version
+const version = JSON.parse(readFileSync(requireDesktop.resolve('electron/package.json'), 'utf8')).version
 const { downloadArtifact } = await import(requireDesktop.resolve('@electron/get'))
 const archive = await downloadArtifact({ version, platform: 'win32', arch: 'x64', artifactName: 'electron', cacheRoot: paths.downloads })
 mkdirSync(paths.electron, { recursive: true })
