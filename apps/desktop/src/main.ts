@@ -49,6 +49,8 @@ import { desktopUpdateErrorSummary, presentDesktopUpdate } from './update-presen
 import { desktopErrorState } from './startup-error.ts'
 import { readDesktopLoginShellEnvironment, resolveDesktopLoginShellConfig } from './login-shell-environment.ts'
 import { DesktopMandatoryUpdatePolicy, resolveDesktopPolicyConfig, type DesktopPolicyState } from './mandatory-update-policy.ts'
+import { portableLocalTestNoPolicy } from './portable-local-test-policy.ts'
+import { MANDATORY_IPC } from './mandatory-update-ipc.ts'
 import { desktopClientMetadata, desktopClientVersion } from './client-metadata.ts'
 import { DesktopMandatoryUpdateWindow } from './mandatory-update-window.ts'
 import { DesktopPolicyTestAuth } from './policy-test-auth.ts'
@@ -82,7 +84,8 @@ const rendererConsole = new RendererConsoleTail()
 
 // Platform-conventional logs directory (macOS ~/Library/Logs/<name>, otherwise under userData);
 // set before ready so the first fatal report already resolves under it.
-if (!configurePortableDesktopPaths(app, process.env, process.execPath, process.platform, app.isPackaged)) app.setAppLogsPath()
+const portableDesktop = configurePortableDesktopPaths(app, process.env, process.execPath, process.platform, app.isPackaged)
+if (!portableDesktop) app.setAppLogsPath()
 
 function currentDesktopLocale(): ReturnType<typeof resolveDesktopLocale> {
   return resolveDesktopLocale(windowsLanguage ?? app.getLocale())
@@ -1297,6 +1300,12 @@ async function main(): Promise<void> {
     ? ('dshMandatoryUpdatePolicy' in manifest ? manifest.dshMandatoryUpdatePolicy : undefined)
     : developmentPolicy === undefined ? undefined : JSON.parse(developmentPolicy) as unknown
   const policyConfig = resolveDesktopPolicyConfig(policyInput, !app.isPackaged)
+  if (portableLocalTestNoPolicy(manifest as Record<string, unknown>, policyInput, portableDesktop)) {
+    ipcMain.handle(MANDATORY_IPC.status, (event) => {
+      assertProductSender(event)
+      return { locale, policy: { blocking: false, checking: false }, update: updates.state, deferred: false }
+    })
+  }
   if (policyConfig !== undefined) {
     if (policyConfig.authentication === 'feishu-test') {
       policyAuth = new DesktopPolicyTestAuth(policyConfig.origin, policyConfig.allowedAuthOrigins, locale,
