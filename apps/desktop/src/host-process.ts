@@ -48,6 +48,9 @@ export interface DesktopQuitInspection {
 /** Quit inspection deadline; a slower Host counts as unknown work and the shell asks before quitting. */
 export const QUIT_INSPECTION_DEADLINE_MS = 2_000
 
+/** A live Host must send ready before a hidden Desktop window waits indefinitely. */
+export const HOST_STARTUP_TIMEOUT_MS = 120_000
+
 const MAX_HOST_DIAGNOSTIC_CHARS = 64 * 1024
 
 function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
@@ -149,6 +152,7 @@ export class DesktopHostProcess {
   private stopping = false
   private shutdownCompleted = false
   private nextControlId = 1
+  private startupTimer: ReturnType<typeof setTimeout> | undefined
   private readonly controlRequests = new Map<number, {
     resolve: (response: DesktopHostControlResponse) => void
     reject: (error: Error) => void
@@ -177,6 +181,7 @@ export class DesktopHostProcess {
     private readonly packageManager?: { readonly pnpm: string; readonly nodeBin: string },
 
     private readonly onPlatformSession?: (session: PlatformSession | null) => void,
+    private readonly startupTimeoutMs?: number,
   ) {}
 
   /**
@@ -209,7 +214,10 @@ export class DesktopHostProcess {
         child.kill('SIGTERM')
         return
       }
-      if (message.type === 'ready') this.readyResolve({ url: message.url, injections: message.injections })
+      if (message.type === 'ready') {
+        this.clearStartupTimer()
+        this.readyResolve({ url: message.url, injections: message.injections })
+      }
       else if (message.type === 'platform-session') this.onPlatformSession?.(message.session)
       else if (message.type === 'shutdown-complete') {
         if (this.stopping) this.shutdownCompleted = true
@@ -223,8 +231,18 @@ export class DesktopHostProcess {
       }
     })
     child.once('error', (error) => { this.fail(error) })
+    if (this.startupTimeoutMs !== undefined) {
+      this.startupTimer = setTimeout(() => {
+        // Stderr is only the last observed output; an incompatible-plugin warning need not be the stall's cause.
+        const diagnostic = `Host startup boundary: executable=${this.node}; entry=${entry}; runtime=${this.runtimeDir}; profile=${this.projectDir}; primaryRuntime=${this.primaryRuntime ?? '(default)'}; lastObservedStderr=${this.stderr.trim() || '(none)'}`
+        this.fail(new DesktopHostFatalError(`dsh desktop Host startup timed out after ${String(this.startupTimeoutMs)}ms`, diagnostic))
+        // DesktopBackendController owns shutdown and escalation after the rejected start.
+      }, this.startupTimeoutMs)
+      this.startupTimer.unref()
+    }
     this.exitPromise = new Promise<void>((resolve) => {
       child.once('close', (code) => {
+        this.clearStartupTimer()
         const suffix = this.stderr.trim() === '' ? '' : `: ${this.stderr.trim()}`
         if (code !== 0 && code !== null) this.fail(new Error(`dsh desktop host exited with ${String(code)}${suffix}`))
         else this.fail(new Error(`dsh desktop host stopped${suffix}`))
@@ -288,6 +306,7 @@ export class DesktopHostProcess {
   async stop(requireGraceful = false): Promise<void> {
     const child = this.child
     if (child === undefined) return
+    this.clearStartupTimer()
     this.stopping = true
     this.onPlatformSession?.(null)
     if (child.connected) child.send({ type: 'shutdown' }, (error) => { if (error !== null) this.fail(error) })
@@ -308,6 +327,7 @@ export class DesktopHostProcess {
   }
 
   private fail(error: Error): void {
+    this.clearStartupTimer()
     this.onPlatformSession?.(null)
     this.readyReject(error)
     for (const request of this.controlRequests.values()) request.reject(error)
@@ -318,5 +338,10 @@ export class DesktopHostProcess {
         console.error('desktop host failure listener failed', listenerError)
       }
     }
+  }
+
+  private clearStartupTimer(): void {
+    if (this.startupTimer !== undefined) clearTimeout(this.startupTimer)
+    this.startupTimer = undefined
   }
 }

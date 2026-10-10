@@ -172,6 +172,43 @@ describe('desktop host process', () => {
     expect(message.length).toBeLessThan(66_000)
   })
 
+  it('fails a live Host that never reports ready, retaining its startup boundary', async () => {
+    const runtime = projectWithHost("import { writeFileSync } from 'node:fs'; import { join } from 'node:path'; process.stderr.write('fixture-secret waiting before ready\\n'); process.on('message', message => { if (message.type === 'shutdown') { writeFileSync(join(process.argv[3], 'stopped'), ''); process.send({ type: 'shutdown-complete' }, () => process.exit(0)) } }); setInterval(() => {}, 1000)")
+    const failure = vi.fn()
+    const host = new DesktopHostProcess(process.execPath, runtime, runtime, undefined, process.env,
+      failure, undefined, undefined, undefined, 10_000)
+    hosts.push(host)
+    await expect(host.start()).rejects.toThrow('Host startup timed out')
+    expect(failure).toHaveBeenCalledTimes(1)
+    const error = (failure.mock.calls[0] as [DesktopHostFatalError])[0]
+    expect(error.message).not.toContain('fixture-secret')
+    expect(error.message).not.toContain(runtime)
+    expect(error.diagnostic).toContain(runtime)
+    expect(error.diagnostic).toContain('fixture-secret waiting before ready')
+    await expect(host.stop()).resolves.toBeUndefined()
+    expect(existsSync(join(runtime, 'stopped'))).toBe(true)
+  }, 25_000)
+
+  it('cancels the startup deadline once the Host reports ready', async () => {
+    const runtime = projectWithHost()
+    const failure = vi.fn()
+    const host = new DesktopHostProcess(process.execPath, runtime, runtime, undefined, process.env,
+      failure, undefined, undefined, undefined, 10_000)
+    hosts.push(host)
+    const ready = await host.start()
+    await new Promise((resolve) => { setTimeout(resolve, 10_200) })
+    expect((await fetch(ready.url)).status).toBe(200)
+    expect(failure).not.toHaveBeenCalled()
+  }, 25_000)
+
+  it('does not apply a startup deadline to an ordinary Desktop Host', async () => {
+    const runtime = projectWithHost("setTimeout(() => process.send({ type: 'ready', url: 'http://127.0.0.1:3080/' }), 3500)")
+    const failure = vi.fn()
+    const host = hostProcess(runtime, runtime, failure)
+    await expect(host.start()).resolves.toMatchObject({ url: 'http://127.0.0.1:3080/' })
+    expect(failure).not.toHaveBeenCalled()
+  }, 25_000)
+
   it('settles teardown when the executable cannot be spawned', async () => {
     const runtime = projectWithHost()
     const host = new DesktopHostProcess(join(runtime, 'missing-node'), runtime, runtime)
