@@ -83,7 +83,7 @@ step desktop_type corepack pnpm exec tsc -p apps/desktop/tsconfig.json --noEmit
 step portable_type corepack pnpm exec tsc -p apps/portable/tsconfig.json --noEmit
 step tests corepack pnpm exec vitest run apps/portable/tests apps/desktop/tests/portable-local-test-policy.spec.ts apps/desktop/tests/portable-entry-paths.spec.ts apps/desktop/tests/desktop-policy-environment.spec.ts --config vitest.config.ts
 export DSH_PORTABLE_LOCAL_TEST=1 DSH_DESKTOP_UNSIGNED=1 DSH_DESKTOP_BUILD_COMMIT="$commit" DSH_DESKTOP_BUILD_DIRTY=0
-step builder bash -c 'cd "$1/apps/desktop" && node node_modules/electron-builder/cli.js --win --x64 --dir --config ../portable/electron-builder.portable.config.mjs' _ "$wt"
+step builder bash -c 'cd "$1/apps/desktop" && node ../../node_modules/electron-builder/cli.js --win --x64 --dir --config ../portable/electron-builder.portable.config.mjs' _ "$wt"
 payload="$wt/apps/desktop/.desktop-build/targets/win-x64/unsigned-portable-local-test/win-unpacked"
 [[ -s "$payload/resources/app.asar" && -s "$payload/DeepSeek Harness.exe" ]] || { echo 'Builder omitted Windows payload' >&2; exit 1; }
 launcher="$out/artifacts/portable-launcher.exe"
