@@ -1,6 +1,7 @@
 /** Isolated unsigned Windows x64 Portable directory build; never a release installer. */
 import { existsSync, readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
+import { createRequire } from 'node:module'
 import { createElectronBuilderConfig } from '../desktop/scripts/electron-builder-config.mjs'
 import { desktopTargetBuildPaths } from '../desktop/scripts/desktop-build-paths.mjs'
 
@@ -16,6 +17,11 @@ export function portableLocalTestBuilderConfig(environment = process.env) {
   const env = { ...environment, DSH_DESKTOP_APP_ID: 'com.deepseek.harness', DSH_DESKTOP_TARGET_PLATFORM: 'win32',
     DSH_DESKTOP_TARGET_ARCH: 'x64', DSH_DESKTOP_UNSIGNED: '1', DSH_PORTABLE_LOCAL_TEST: '1' }
   const config = createElectronBuilderConfig(env, 'win32', 'x64', runtime)
+  const requireDesktop = createRequire(new URL('../desktop/package.json', import.meta.url))
+  const electronVersion = JSON.parse(readFileSync(requireDesktop.resolve('electron/package.json'), 'utf8')).version
+  const cachedVersion = readFileSync(join(paths.electron, 'version'), 'utf8').trim()
+  if (electronVersion !== cachedVersion) throw new Error('portable local test: Electron cache/version mismatch')
+  config.electronVersion = electronVersion
   config.win.target = ['dir']
   config.win.forceCodeSigning = false
   config.publish = null
