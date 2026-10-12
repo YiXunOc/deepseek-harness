@@ -22,7 +22,7 @@ short="${commit:0:10}"
 version="$(node -p 'require(process.argv[1]).version' "$repo/apps/desktop/package.json")"
 avail="$(df -B1 --output=avail "$repo" | python3 -c 'import sys; print(int(sys.stdin.read().splitlines()[-1]))')"
 (( avail >= 12*1024*1024*1024 )) || { echo 'Need at least 12 GiB available for isolated build' >&2; exit 1; }
-for executable in git corepack node python3 zip unzip sha256sum wine x86_64-w64-mingw32-gcc file curl; do
+for executable in git corepack node python3 zip unzip sha256sum wine x86_64-w64-mingw32-gcc x86_64-w64-mingw32-windres file curl; do
   command -v "$executable" >/dev/null || { echo "Missing $executable" >&2; exit 1; }
 done
 mkdir -p "$repo/.artifacts/portable" "${TMPDIR:-$HOME/.cache}/dsh-portable-builds"
@@ -87,7 +87,11 @@ step builder bash -c 'cd "$1/apps/desktop" && node ../../node_modules/electron-b
 payload="$wt/apps/desktop/.desktop-build/targets/win-x64/unsigned-portable-local-test/win-unpacked"
 [[ -s "$payload/resources/app.asar" && -s "$payload/DeepSeek Harness.exe" ]] || { echo 'Builder omitted Windows payload' >&2; exit 1; }
 launcher="$out/artifacts/portable-launcher.exe"
-step launcher x86_64-w64-mingw32-gcc -municode -mwindows -O2 -Wall -Wextra -o "$launcher" apps/portable/src/portable-launcher.c
+step launcher_icon node apps/portable/scripts/prepare-launcher-icon.mjs "$out/launcher-icon.ico"
+printf '1 ICON "%s"\n' "$out/launcher-icon.ico" > "$out/launcher-icon.rc"
+step launcher_resource x86_64-w64-mingw32-windres -i "$out/launcher-icon.rc" -O coff -o "$out/launcher-icon.o"
+step launcher x86_64-w64-mingw32-gcc -municode -mwindows -O2 -Wall -Wextra -o "$launcher" apps/portable/src/portable-launcher.c "$out/launcher-icon.o"
+step verify_launcher_icon python3 apps/portable/scripts/verify-launcher-icon.py "$launcher" "$out/launcher-icon.ico"
 assembly="$wt/apps/portable/.build/DSH-Desktop-${version}-x64-Portable-local-test-${short}"
 step assemble corepack pnpm exec tsx apps/portable/src/cli.ts assemble --source "$payload" --output "$assembly" --launcher "$launcher" --version "$version" --commit "$commit"
 step archive corepack pnpm exec tsx apps/portable/src/cli.ts archive --source "$assembly" --artifacts "$out/artifacts" --version "$version" --commit "$commit"

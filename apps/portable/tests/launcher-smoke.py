@@ -34,7 +34,15 @@ with tempfile.TemporaryDirectory(prefix='dsh-launcher-', dir=os.environ.get('TMP
     app = root / 'App'
     app.mkdir(parents=True)
     subprocess.run(['x86_64-w64-mingw32-gcc', '-municode', '-O2', '-o', str(app / 'DeepSeek Harness.exe'), '-x', 'c', '-'], input=probe, text=True, check=True)
-    subprocess.run(['x86_64-w64-mingw32-gcc', '-municode', '-mwindows', '-O2', '-o', str(root / 'DSH Desktop Portable.exe'), str(launcher_src)], check=True)
+    icon = pathlib.Path(tmp) / 'icon.ico'
+    resource = pathlib.Path(tmp) / 'icon.rc'
+    obj = pathlib.Path(tmp) / 'icon.o'
+    subprocess.run(['node', str(repo / 'scripts' / 'prepare-launcher-icon.mjs'), str(icon)], check=True)
+    resource.write_text(f'1 ICON "{icon}"\n')
+    subprocess.run(['x86_64-w64-mingw32-windres', '-i', str(resource), '-O', 'coff', '-o', str(obj)], check=True)
+    launcher = root / 'DSH Desktop Portable.exe'
+    subprocess.run(['x86_64-w64-mingw32-gcc', '-municode', '-mwindows', '-O2', '-o', str(launcher), str(launcher_src), str(obj)], check=True)
+    subprocess.run(['python3', str(repo / 'scripts' / 'verify-launcher-icon.py'), str(launcher), str(icon)], check=True)
     env = {**os.environ, 'USERPROFILE': 'C:\\Users\\real-user'}
     result = subprocess.run(['wine', str(root / 'DSH Desktop Portable.exe'), 'with space', 'second'], env=env, timeout=60, capture_output=True, text=True)
     print('Wine launcher child exit:', result.returncode)
