@@ -29,7 +29,7 @@ def verify(tree: pathlib.Path, archive: pathlib.Path) -> None:
     for name in ['DSH Desktop Portable.exe', 'App/DeepSeek Harness.exe',
                  'App/resources/app.asar', 'App/resources/runtime/primary-runtime/runtime.json',
                  'App/resources/app.asar.unpacked/dsh/node_modules/node-pty/prebuilds/win32-x64/conpty.node',
-                 'App/resources/app.asar.unpacked/dsh/node_modules/@deepseek-ai/dsh-desktop-host/node_modules/@koromix/koffi-win32-x64/win32_x64/koffi.node']:
+                 'App/resources/app.asar.unpacked/dsh/node_modules/@koromix/koffi-win32-x64/win32_x64/koffi.node']:
         if name not in expected_files:
             raise ValueError(f'missing Portable entry: {name}')
     if 'DeepSeek Harness.exe' in expected_files or 'DSH Desktop Portable.cmd' in expected_files:
@@ -37,7 +37,7 @@ def verify(tree: pathlib.Path, archive: pathlib.Path) -> None:
     for name in ['DSH Desktop Portable.exe', 'App/DeepSeek Harness.exe',
                  'App/resources/runtime/primary-runtime/dependencies/node/bin/node.exe',
                  'App/resources/app.asar.unpacked/dsh/node_modules/node-pty/prebuilds/win32-x64/conpty.node',
-                 'App/resources/app.asar.unpacked/dsh/node_modules/@deepseek-ai/dsh-desktop-host/node_modules/@koromix/koffi-win32-x64/win32_x64/koffi.node']:
+                 'App/resources/app.asar.unpacked/dsh/node_modules/@koromix/koffi-win32-x64/win32_x64/koffi.node']:
         if pe_machine(expected_files[name]) != 0x8664:
             raise ValueError(f'not Windows x64 PE: {name}')
     layout = json.loads(expected_files['AppData/layout.json'].read_text())

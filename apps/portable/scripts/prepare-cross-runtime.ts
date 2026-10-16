@@ -90,7 +90,7 @@ async function materialize(): Promise<void> {
   for (const name of [
     'node-pty/prebuilds/win32-x64/conpty.node',
     'node-pty/prebuilds/win32-x64/conpty_console_list.node',
-    '@deepseek-ai/dsh-desktop-host/node_modules/@koromix/koffi-win32-x64/win32_x64/koffi.node',
+    '@koromix/koffi-win32-x64/win32_x64/koffi.node',
   ]) requireFile(join(modules, name))
   mkdirSync(output, { recursive: true })
   cpSync(modules, join(output, 'node_modules'), { recursive: true, dereference: true,
@@ -111,7 +111,7 @@ async function verify(): Promise<void> {
   const set = verifyDesktopCorePackageSet(paths.packageSet, version)
   if (descriptor.sharedPackages.length !== set.packages.length) throw new Error('portable cross runtime: incomplete package set')
   requireFile(join(output, 'node_modules/node-pty/prebuilds/win32-x64/conpty.node'))
-  requireFile(join(output, 'node_modules/@deepseek-ai/dsh-desktop-host/node_modules/@koromix/koffi-win32-x64/win32_x64/koffi.node'))
+  requireFile(join(output, 'node_modules/@koromix/koffi-win32-x64/win32_x64/koffi.node'))
   console.log('VERIFIED', descriptor.sharedPackages.length, descriptor.files.length)
 }
 
