@@ -933,6 +933,8 @@ importers:
         specifier: ^4.22.4
         version: 4.23.13
 
+  apps/portable: {}
+
   apps/web:
     dependencies:
       '@deepseek-ai/dsh-message-quotes':
