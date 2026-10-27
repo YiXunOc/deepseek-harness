@@ -3,7 +3,7 @@ import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type { ToolCallBlock, ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
-import type { PromptSection, ToolProviderResult } from '@deepseek-ai/dsh-system-prompt'
+import type { AssembleContext, PromptSection, ToolProviderResult } from '@deepseek-ai/dsh-system-prompt'
 import type { ResolvedToolSet, ToolDefinition, ToolExecutionResult } from './contracts.ts'
 
 /** Model-call schemas produced by an executor. */
@@ -12,7 +12,7 @@ export type ToolModelInput = Pick<ToolProviderResult, 'schemas' | 'knownNames'>
 /** Executor-owned guidance registered through the system-prompt section API. */
 export interface ToolPromptSection extends Pick<PromptSection, 'name' | 'order' | 'interpolate'> {
   /** Static guidance or text generated from this step's visible capability definitions. */
-  readonly text: string | ((tools: readonly ToolDefinition[]) => string)
+  readonly text: string | ((tools: readonly ToolDefinition[], context: AssembleContext) => string)
 }
 
 /** Raw model calls, with optional Agent ownership and model-step logging. */

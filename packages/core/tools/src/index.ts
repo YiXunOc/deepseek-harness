@@ -7,6 +7,8 @@ import { ToolExecutorUnavailableError } from './executor.ts'
 import type { ToolExecutor, ToolBatchInput, ToolBatchResult } from './executor.ts'
 import './events.ts'
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-user-approval'
 import { projectToolSchema } from './schema.ts'
 import { assertSupportedJsonSchema } from './json-schema.ts'
 import { RUN_CODE_NAME, ToolActivationError } from './contracts.ts'
@@ -110,10 +112,14 @@ export class ToolsService extends Service {
 
   constructor(ctx: Context) {
     super(ctx, 'tools')
-    ctx.systemPrompt.tools(({ scope, toolSet }) => {
+    ctx.systemPrompt.tools(({ scope, toolSet, agent }) => {
       const executor = this.selectExecutor(scope)
       const description = executor.describe(this.definitions(scope, toolSet))
-      return { ...description, knownNames: description.knownNames ?? [...this.view(scope).knownNames] }
+      return {
+        ...description,
+        schemas: description.schemas.map(schema => this.modelSchema(schema, agent)),
+        knownNames: description.knownNames ?? [...this.view(scope).knownNames],
+      }
     })
   }
 
@@ -316,6 +322,41 @@ export class ToolsService extends Service {
   schemas(scope?: ScopeKey, toolSet?: ResolvedToolSet): ToolSchema[] {
     return this.definitions(scope, toolSet).map(definition => projectToolSchema(definition, true))
   }
+
+  private approvalNever(agent?: Agent): boolean {
+    const approval = this.ctx.get('approval')
+    return typeof approval?.effectivePolicy === 'function' && approval.effectivePolicy(agent?.session) === 'never'
+  }
+
+  /** Filter only a detached model view; registered definitions retain their full schema. */
+  modelSchema(schema: ToolSchema, agent?: Agent): ToolSchema {
+    if (agent === undefined || !this.approvalNever(agent)) return schema
+    const parameters = schema.parameters as { properties?: Record<string, unknown>; required?: string[] }
+    const properties = parameters.properties
+    if (properties === undefined) return schema
+    const { sandbox_permissions: _permissions, justification: _reason, ...visible } = properties
+    const { required, ...rest } = parameters
+    if (_permissions === undefined && _reason === undefined
+      && !required?.some(key => key === 'sandbox_permissions' || key === 'justification')) return schema
+    return {
+      ...schema,
+      parameters: {
+        ...rest,
+        properties: visible,
+        ...required === undefined ? {} : { required: required.filter(key => key !== 'sandbox_permissions' && key !== 'justification') },
+      },
+    }
+  }
+
+  /** Enforce never before optional tool-policy listeners can request approval. */
+  escalationPolicyDenial(exec: ToolExecution): string | undefined {
+    if (!this.approvalNever(exec.agent)) return undefined
+    if (!['bash', 'pwsh', 'run_code', 'write', 'edit'].includes(exec.name)) return undefined
+    const args = exec.arguments
+    if (args === null || typeof args !== 'object' || Array.isArray(args)) return undefined
+    if (!Object.hasOwn(args, 'sandbox_permissions') && !Object.hasOwn(args, 'justification')) return undefined
+    return 'approval policy is never: sandbox_permissions and justification are forbidden in this session'
+  }
   /**
    * Provide the executor for the calling scope; an unscoped contribution is the deployment default.
    * Rendering any executor-owned section requires the viewing scope's selection to remain available.
@@ -334,9 +375,10 @@ export class ToolsService extends Service {
           name: section.name,
           order: section.order,
           ...section.interpolate === undefined ? {} : { interpolate: section.interpolate },
-          text: ({ scope, toolSet }) => {
+          text: (context) => {
+            const { scope, toolSet } = context
             if (this.selectExecutor(scope) !== executor) return ''
-            return typeof section.text === 'function' ? section.text(this.definitions(scope, toolSet)) : section.text
+            return typeof section.text === 'function' ? section.text(this.definitions(scope, toolSet), context) : section.text
           },
         })
       }

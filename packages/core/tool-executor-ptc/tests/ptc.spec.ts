@@ -20,7 +20,7 @@ import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import type { JsonSchemaNode, PostToolDecision, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SessionStore, { Session, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
-import ApprovalService, { type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
+import ApprovalService, { setApprovalPolicy, type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import type { SessionEventMap } from '@deepseek-ai/dsh-session'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
@@ -2421,6 +2421,66 @@ describe('per-program execution controls', () => {
       expect(rejected.isError).toBe(true)
       expect(python.runtime.lastRequest).toBeUndefined()
     } finally { await python.ctx.fiber.dispose() }
+  })
+
+  it('hides escalation in run_code and the nested SDK under never without mutating registered definitions', async () => {
+    const { ctx, agent, session, runtime, execute } = await controlledSetup()
+    let nestedRuns = 0
+    const nested = defineTool({
+      name: 'write', description: 'Write a file.',
+      parameters: {
+        file_path: { type: 'string', required: true },
+        sandbox_permissions: { type: 'string' },
+        justification: { type: 'string' },
+      },
+      output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
+      async execute() { nestedRuns++; return 'ok' },
+    })
+    ctx.tools.register(nested)
+    const view = () => ctx.systemPrompt.assemble({ agent, scope: agent })
+    try {
+      expect((await view()).tools[0]?.parameters).toHaveProperty('properties.sandbox_permissions')
+      setApprovalPolicy(session, 'never')
+      const assembly = await view()
+      const params = assembly.tools[0]?.parameters as { properties: Record<string, unknown>; required: string[] }
+      expect(params.properties).not.toHaveProperty('sandbox_permissions')
+      expect(params.properties).not.toHaveProperty('justification')
+      expect(params.required).toEqual(['code', 'description'])
+      const sdk = assembly.sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+      expect(sdk).not.toContain('sandbox_permissions')
+      expect(sdk).not.toContain('justification')
+      expect(nested.parameters).toHaveProperty('properties.sandbox_permissions')
+      expect(ctx.tools.schemas(agent)[0]?.parameters).toHaveProperty('properties.sandbox_permissions')
+      for (const fields of [{ sandbox_permissions: 'read-only', justification: '' }, { justification: '' }, { sandbox_permissions: 'workspace-write', justification: 'why' }]) {
+        const rejected = await execute(fields)
+        expect(rejected.isError).toBe(true)
+        expect(JSON.stringify(rejected.content)).toContain('approval policy')
+        expect(runtime.lastRequest).toBeUndefined()
+      }
+      expect(session.snapshotEvents().filter(event => event.type === 'approval/asked')).toHaveLength(0)
+      const allowed = await execute({})
+      expect(allowed.isError).toBe(false)
+      expect(runtime.lastRequest?.sandboxPolicy?.mode).toBe('read-only')
+      let askCalls = 0
+      ctx.on('approval/request', () => { askCalls++; return Promise.resolve<ApprovalOutcome>('allowed-once') })
+      runtime.behavior = async (request) => {
+        try {
+          await request.bindings[0]!.functions.write!({ file_path: 'test.txt', sandbox_permissions: 'read-only', justification: 'why' })
+          return { logs: [], value: 'unexpected success' }
+        } catch (error) {
+          return { logs: [], value: String(error) }
+        }
+      }
+      const nestedResult = await execute({})
+      expect(nestedResult.isError).toBe(false)
+      expect(JSON.stringify(nestedResult.value)).toContain('approval policy is never')
+      expect(nestedRuns).toBe(0)
+      expect(askCalls).toBe(0)
+      expect(session.snapshotEvents().filter(event => event.type === 'approval/asked')).toHaveLength(0)
+      setApprovalPolicy(session, 'ask')
+      expect((await view()).tools[0]?.parameters).toHaveProperty('properties.sandbox_permissions')
+      expect((await view()).sections.find(section => section.name === 'tools:sdk')?.text).toContain('sandbox_permissions')
+    } finally { await ctx.fiber.dispose() }
   })
 
   it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY, '1000', null])('rejects invalid timeout %s before runtime execution', async (timeoutMs) => {

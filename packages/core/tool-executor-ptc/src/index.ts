@@ -1,5 +1,6 @@
 /** PTC execution plugin for the mounting Agent, preset, or deployment scope. @module */
 import type { Context } from '@deepseek-ai/cordis'
+import type { AssembleContext } from '@deepseek-ai/dsh-system-prompt'
 import { RUN_CODE_NAME, ToolNotFoundError, projectToolSchema } from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition, ToolExecutor, ToolModelInput, ToolPromptSection, ToolBatchInput, ToolBatchResult } from '@deepseek-ai/dsh-tools'
 import { ToolExecutionPipeline, executeToolBatch } from '@deepseek-ai/dsh-tools/pipeline'
@@ -27,7 +28,7 @@ export class PtcExecutor implements ToolExecutor {
     const tools = ctx.tools
     this.sections = [
       { name: 'tools:ptc-only', order: ctx.systemPrompt.getSectionOrder('PTC_ONLY'), text: PTC_ONLY_INSTRUCTION, interpolate: false },
-      { name: 'tools:sdk', order: ctx.systemPrompt.getSectionOrder('TOOLS_SDK'), text: tools => this.renderSdk(tools), interpolate: false },
+      { name: 'tools:sdk', order: ctx.systemPrompt.getSectionOrder('TOOLS_SDK'), text: (tools, context) => this.renderSdk(tools, context), interpolate: false },
     ]
     this.pipeline = new ToolExecutionPipeline(ctx, {
       get: (name, scope, toolSet) => name === RUN_CODE_NAME ? this.requirePtcTransport() : tools.executable(name, scope, toolSet),
@@ -41,11 +42,11 @@ export class PtcExecutor implements ToolExecutor {
     return { schemas: [projectToolSchema(this.requirePtcTransport(), false)], knownNames: [RUN_CODE_NAME] }
   }
 
-  private renderSdk(tools: readonly ToolDefinition[]): string {
+  private renderSdk(tools: readonly ToolDefinition[], context: AssembleContext): string {
     const runtime = requirePtcRuntime(this.ctx)
     const render = SDK_RENDERERS[runtime.language]
     return render(tools.map(definition => ({
-      ...projectToolSchema(definition, false),
+      ...this.ctx.tools.modelSchema(projectToolSchema(definition, false), context.agent),
       output: definition.output.schema,
     })), runtime.programFormat)
   }

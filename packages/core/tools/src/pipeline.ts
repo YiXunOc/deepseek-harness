@@ -194,6 +194,10 @@ export class ToolExecutionPipeline {
     if (this.callerCancelled(exec)) {
       return { kind: 'final-result', exec, result: toolAbortedBeforeDispatchResult() }
     }
+    const policyDenial = this.tools.escalationPolicyDenial(exec)
+    if (policyDenial !== undefined) {
+      return { kind: 'final-result', exec, result: toolErrorResult(new Error(policyDenial)) }
+    }
     try {
       const carrier = scopeTarget(this.tools, exec.agent)
       const gate = await this.ctx.waterfall(

@@ -264,11 +264,11 @@ export class ApprovalService extends Service {
    * The session's effective policy: its projected override, else the
    * configured default (the schema already defaulted an omitted policy to
    * `'ask'`; the `??` only narrows the optional-input TYPE).
-   * @param session - the exact accepted session whose policy applies.
-   * @returns the policy every ask for this session resolves under right now.
+   * @param session - the session whose policy applies, or omitted for the deployment default.
+   * @returns the policy an ask for this session resolves under right now.
    */
-  private effectivePolicy(session: Session): ApprovalPolicy {
-    return this.overrideOf(session) ?? this.config.policy ?? 'ask'
+  effectivePolicy(session?: Session): ApprovalPolicy {
+    return (session === undefined ? undefined : this.overrideOf(session)) ?? this.config.policy ?? 'ask'
   }
 
   /**
